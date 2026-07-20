@@ -46,16 +46,15 @@ export default defineBackground(() => {
 	if (import.meta.env.BROWSER === 'chrome') {
 		browser.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {})
 	} else {
-		// Firefox: no sidePanel API — browser action opens hub tab instead
-		// ponytail: MV2 uses browserAction, MV3/Chrome uses action
+		// Firefox: open sidebar panel (like Chrome's side panel)
 		const actionApi = (browser as any).browserAction ?? browser.action
 		actionApi.onClicked.addListener(() => {
-			browser.tabs.create({ url: browser.runtime.getURL('sidepanel.html') })
+			browser.sidebarAction.open()
 		})
 		// Firefox: keyboard shortcut via commands API
 		browser.commands.onCommand.addListener((command) => {
 			if (command === 'open-hub') {
-				browser.tabs.create({ url: browser.runtime.getURL('sidepanel.html') })
+				browser.sidebarAction.open()
 			}
 		})
 	}

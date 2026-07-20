@@ -79,6 +79,13 @@ export default defineConfig({
 				matches: ['http://localhost/*'],
 			},
 		}),
+		// Firefox: sidebar panel (like Chrome's side panel)
+		...(browser === 'firefox' && {
+			sidebar_action: {
+				default_title: 'Page Agent',
+				default_panel: 'sidepanel.html',
+			},
+		}),
 		// Firefox: keyboard shortcut to open hub tab (Ctrl+Alt+Z)
 		...(browser === 'firefox' && {
 			commands: {
