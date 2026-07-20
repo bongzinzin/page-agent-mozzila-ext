@@ -48,6 +48,39 @@ The GUI Agent Living in Your Webpage. One script gives any web page its own AI a
 - **Multi-page Agent** — Extend your own web agent's reach across browser tabs via the [Chrome extension](https://alibaba.github.io/page-agent/docs/features/chrome-extension).
 - **MCP** - Allow your agent clients to control your browser.
 
+## 🦊 Firefox Extension
+
+Build and load the extension in Firefox for local development.
+
+### Prerequisites
+
+- **Node.js** >= 22.22.1
+- **npm** >= 11.6.3
+
+### Install dependencies
+
+```bash
+npm install
+```
+
+### Build for Firefox
+
+```bash
+cd packages/extension
+npx wxt zip -b firefox
+```
+
+Output goes to `packages/extension/.output/firefox-mv2/`.
+
+### Load in Firefox
+
+1. Open Firefox and navigate to `about:debugging#/runtime/this-firefox`
+2. Click **Load Temporary Add-on**
+3. Select `packages/extension/.output/firefox-mv2/manifest.json`
+4. The extension loads as a sidebar panel. Toggle with **Ctrl+Alt+Z**.
+
+> The extension uses a sidebar panel (Firefox's equivalent of Chrome's side panel).
+
 ## 🚀 Quick Start
 
 ### One-line integration
