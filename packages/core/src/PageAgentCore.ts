@@ -90,6 +90,7 @@ export class PageAgentCore extends EventTarget {
 	 */
 	#abortController = new AbortController()
 	#observations: string[] = []
+	#lastPromptTokens = 0
 
 	/** Resolves when the current run has fully settled. Awaited by `stop()`. */
 	#running: Promise<void> = Promise.resolve()
@@ -204,6 +205,16 @@ export class PageAgentCore extends EventTarget {
 	}
 
 	/**
+	 * Reset conversation history and token counter for a new chat.
+	 */
+	resetHistory(): void {
+		if (this.#status === 'running') return
+		this.history = []
+		this.#observations = []
+		this.#lastPromptTokens = 0
+	}
+
+	/**
 	 * external errors (pre-checks/config/hooks) will threw;
 	 * agent errors will be caught and added to history, and return a failed result
 	 */
@@ -216,7 +227,7 @@ export class PageAgentCore extends EventTarget {
 		this.task = task
 		this.taskId = uid()
 
-		this.history = []
+		// this.history = [] — ponytail: persist history across execute() calls
 		this.#observations = []
 		this.#states = { totalWaitTime: 0, lastURL: '', browserState: null }
 		this.#abortController = new AbortController()
@@ -248,6 +259,8 @@ export class PageAgentCore extends EventTarget {
 		try {
 			await onBeforeTask?.(this)
 
+			this.history.push({ type: 'observation', content: `New user request: ${task}` })
+
 			while (true) {
 				await onBeforeStep?.(this, step)
 
@@ -272,7 +285,7 @@ export class PageAgentCore extends EventTarget {
 
 					const messages = [
 						{ role: 'system' as const, content: this.#getSystemPrompt() },
-						{ role: 'user' as const, content: await this.#assembleUserPrompt() },
+						{ role: 'user' as const, content: await this.#assembleUserPrompt(step) },
 					]
 
 					const macroTool = { AgentOutput: this.#packMacroTool() }
@@ -286,6 +299,12 @@ export class PageAgentCore extends EventTarget {
 						toolChoiceName: 'AgentOutput',
 						normalizeResponse: (res) => normalizeResponse(res, this.tools),
 					})
+
+					// ponytail: fallback to char estimate if LLM provider omits usage
+					const toolDefsLength = JSON.stringify(macroTool).length
+					this.#lastPromptTokens =
+						result.usage?.promptTokens ??
+						Math.ceil((JSON.stringify(messages).length + toolDefsLength) / 4)
 
 					// assemble history
 
@@ -346,7 +365,7 @@ export class PageAgentCore extends EventTarget {
 				}
 
 				step++
-				if (step > maxSteps) {
+				if (step >= maxSteps) {
 					const message = 'Step count exceeded maximum limit'
 					console.error(message)
 					this.#emitActivity({ type: 'error', message: message })
@@ -576,7 +595,7 @@ export class PageAgentCore extends EventTarget {
 		}
 	}
 
-	async #assembleUserPrompt(): Promise<string> {
+	async #assembleUserPrompt(step: number): Promise<string> {
 		const browserState = this.#states.browserState!
 
 		let prompt = ''
@@ -590,9 +609,41 @@ export class PageAgentCore extends EventTarget {
 		//  - <step_info>
 		// <agent_state>
 
-		const stepCount = this.history.filter((e) => e.type === 'step').length
+		// <agent_history>
+		//  - <step_N> for steps
+		//  - <sys> for observations and system messages
+
+		// ponytail: token-based compaction — drop oldest steps when near context limit
+		const contextWindow = this.config.contextWindow ?? 128000
+		const threshold = contextWindow * 0.8
+		let compactionNote = ''
+		if (this.#lastPromptTokens > threshold) {
+			const stepCount = this.history.filter((e) => e.type === 'step').length
+			const keepCount = Math.floor(stepCount / 2)
+			if (keepCount > 0) {
+				// Keep last N steps and all events after the first kept step
+				let stepsSeen = 0
+				let cutoffIndex = 0
+				for (let i = this.history.length - 1; i >= 0; i--) {
+					if (this.history[i].type === 'step') stepsSeen++
+					if (stepsSeen >= keepCount) {
+						cutoffIndex = i
+						break
+					}
+				}
+				this.history = this.history.slice(cutoffIndex)
+				compactionNote = '[System] History compacted to stay within token budget\n'
+			}
+			// Trim observations to last 10
+			if (this.#observations.length > 10) {
+				this.#observations = this.#observations.slice(-10)
+			}
+		}
+
+		const stepCount = step
 
 		prompt += '<agent_state>\n'
+		if (compactionNote) prompt += `<sys>${compactionNote}</sys>\n`
 		prompt += '<user_request>\n'
 		prompt += `${this.task}\n`
 		prompt += '</user_request>\n'
@@ -601,10 +652,6 @@ export class PageAgentCore extends EventTarget {
 		prompt += `Current time: ${new Date().toLocaleString()}\n`
 		prompt += '</step_info>\n'
 		prompt += '</agent_state>\n\n'
-
-		// <agent_history>
-		//  - <step_N> for steps
-		//  - <sys> for observations and system messages
 
 		prompt += '<agent_history>\n'
 
@@ -650,7 +697,7 @@ export class PageAgentCore extends EventTarget {
 		console.log('Disposing PageAgent...')
 		this.disposed = true
 		this.pageController.dispose()
-		// this.history = []
+		this.history = [] // Clear history on dispose
 		this.#abortController.abort()
 
 		// Emit dispose event for UI cleanup

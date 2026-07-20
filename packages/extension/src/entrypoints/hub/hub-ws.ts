@@ -159,7 +159,7 @@ export class HubWs {
 	async #checkApproval(): Promise<boolean> {
 		if (this.#approved) return true
 
-		const { allowAllHubConnection } = await chrome.storage.local.get('allowAllHubConnection')
+		const { allowAllHubConnection } = await browser.storage.local.get('allowAllHubConnection')
 		if (allowAllHubConnection === true) {
 			this.#approved = true
 			return true

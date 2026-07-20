@@ -147,14 +147,14 @@ function HubConfig() {
 	const [allowAll, setAllowAll] = useState(false)
 
 	useEffect(() => {
-		chrome.storage.local.get('allowAllHubConnection').then((r) => {
+		browser.storage.local.get('allowAllHubConnection').then((r) => {
 			setAllowAll(r.allowAllHubConnection === true)
 		})
 	}, [])
 
 	const toggle = (checked: boolean) => {
 		setAllowAll(checked)
-		chrome.storage.local.set({ allowAllHubConnection: checked })
+		browser.storage.local.set({ allowAllHubConnection: checked })
 	}
 
 	return (

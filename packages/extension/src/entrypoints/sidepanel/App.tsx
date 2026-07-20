@@ -1,4 +1,4 @@
-import { History, Send, Settings, Square } from 'lucide-react'
+import { History, Send, Settings, Square, SquarePen } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { ConfigPanel } from '@/components/ConfigPanel'
@@ -29,7 +29,8 @@ export default function App() {
 	const historyRef = useRef<HTMLDivElement>(null)
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-	const { status, history, activity, currentTask, config, execute, stop, configure } = useAgent()
+	const { status, history, activity, currentTask, config, execute, stop, resetHistory, configure } =
+		useAgent()
 
 	// Persist session when task finishes
 	const prevStatusRef = useRef(status)
@@ -142,6 +143,21 @@ export default function App() {
 				</div>
 				<div className="flex items-center gap-1">
 					<StatusDot status={status} />
+					{history.length > 0 && !isRunning && (
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							onClick={() => {
+								resetHistory()
+								setView({ name: 'chat' })
+							}}
+							className="cursor-pointer"
+							aria-label="New chat"
+							title="New chat"
+						>
+							<SquarePen className="size-3.5" />
+						</Button>
+					)}
 					<Button
 						variant="ghost"
 						size="icon-sm"

@@ -9,6 +9,7 @@ import type {
 	SupportedLanguage,
 } from '@page-agent/core'
 import type { LLMConfig } from '@page-agent/llms'
+import { browser } from '@wxt-dev/browser'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { MultiPageAgent } from './MultiPageAgent'
@@ -37,6 +38,7 @@ export interface UseAgentResult {
 	config: ExtConfig | null
 	execute: (task: string) => Promise<ExecutionResult>
 	stop: () => void
+	resetHistory: () => void
 	configure: (config: ExtConfig) => Promise<void>
 }
 
@@ -49,7 +51,7 @@ export function useAgent(): UseAgentResult {
 	const [config, setConfig] = useState<ExtConfig | null>(null)
 
 	useEffect(() => {
-		chrome.storage.local.get(['llmConfig', 'language', 'advancedConfig']).then((result) => {
+		browser.storage.local.get(['llmConfig', 'language', 'advancedConfig']).then((result) => {
 			let llmConfig = (result.llmConfig as LLMConfig) ?? DEMO_CONFIG
 			const language = (result.language as SupportedLanguage) || undefined
 			const advancedConfig = (result.advancedConfig as AdvancedConfig) ?? {}
@@ -58,9 +60,9 @@ export function useAgent(): UseAgentResult {
 			const migrated = migrateLegacyEndpoint(llmConfig)
 			if (migrated !== llmConfig) {
 				llmConfig = migrated
-				chrome.storage.local.set({ llmConfig: migrated })
+				browser.storage.local.set({ llmConfig: migrated })
 			} else if (!result.llmConfig) {
-				chrome.storage.local.set({ llmConfig: DEMO_CONFIG })
+				browser.storage.local.set({ llmConfig: DEMO_CONFIG })
 			}
 
 			setConfig({ ...llmConfig, ...advancedConfig, language })
@@ -111,12 +113,17 @@ export function useAgent(): UseAgentResult {
 		if (!agent) throw new Error('Agent not initialized')
 
 		setCurrentTask(task)
-		setHistory([])
 		return agent.execute(task)
 	}, [])
 
 	const stop = useCallback(() => {
 		agentRef.current?.stop()
+	}, [])
+
+	const resetHistory = useCallback(() => {
+		agentRef.current?.resetHistory()
+		setHistory([])
+		setCurrentTask('')
 	}, [])
 
 	const configure = useCallback(
@@ -129,11 +136,11 @@ export function useAgent(): UseAgentResult {
 			disableNamedToolChoice,
 			...llmConfig
 		}: ExtConfig) => {
-			await chrome.storage.local.set({ llmConfig })
+			await browser.storage.local.set({ llmConfig })
 			if (language) {
-				await chrome.storage.local.set({ language })
+				await browser.storage.local.set({ language })
 			} else {
-				await chrome.storage.local.remove('language')
+				await browser.storage.local.remove('language')
 			}
 			const advancedConfig: AdvancedConfig = {
 				maxSteps,
@@ -142,7 +149,7 @@ export function useAgent(): UseAgentResult {
 				experimentalIncludeAllTabs,
 				disableNamedToolChoice,
 			}
-			await chrome.storage.local.set({ advancedConfig })
+			await browser.storage.local.set({ advancedConfig })
 			setConfig({ ...llmConfig, ...advancedConfig, language })
 		},
 		[]
@@ -156,6 +163,7 @@ export function useAgent(): UseAgentResult {
 		config,
 		execute,
 		stop,
+		resetHistory,
 		configure,
 	}
 }

@@ -1,3 +1,5 @@
+import { browser } from '@wxt-dev/browser'
+
 /**
  * background logics for RemotePageController
  * - redirect messages from RemotePageController(Agent, extension pages) to ContentScript
@@ -5,7 +7,7 @@
 
 export function handlePageControlMessage(
 	message: { type: 'PAGE_CONTROL'; action: string; payload: any; targetTabId: number },
-	sender: chrome.runtime.MessageSender,
+	sender: browser.runtime.MessageSender,
 	sendResponse: (response: unknown) => void
 ): true | undefined {
 	const PREFIX = '[RemotePageController.background]'
@@ -21,7 +23,7 @@ export function handlePageControlMessage(
 	}
 
 	// proxy to content script
-	chrome.tabs
+	browser.tabs
 		.sendMessage(targetTabId, {
 			type: 'PAGE_CONTROL',
 			action,

@@ -98,6 +98,11 @@ export interface LLMConfig {
 	 */
 	temperature?: number
 
+	/**
+	 * Context window size in tokens. Used for history compaction.
+	 */
+	contextWindow?: number
+
 	maxRetries?: number
 
 	/**
@@ -124,4 +129,7 @@ export interface LLMConfig {
 	customFetch?: typeof globalThis.fetch
 }
 
-export type ResolvedLLMConfig = Required<Omit<LLMConfig, 'temperature'>> & { temperature?: number }
+export type ResolvedLLMConfig = Required<Omit<LLMConfig, 'temperature' | 'contextWindow'>> & {
+	temperature?: number
+	contextWindow: number
+}

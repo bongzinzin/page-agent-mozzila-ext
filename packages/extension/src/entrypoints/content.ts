@@ -13,7 +13,7 @@ export default defineContentScript({
 		initPageController()
 
 		// if auth token matches, expose agent to page
-		chrome.storage.local.get('PageAgentExtUserAuthToken').then((result) => {
+		browser.storage.local.get('PageAgentExtUserAuthToken').then((result) => {
 			// extension side token.
 			// @note this is isolated world. it is safe to assume user script cannot access it
 			const extToken = result.PageAgentExtUserAuthToken
@@ -30,7 +30,13 @@ export default defineContentScript({
 			// add isolated world script
 			exposeAgentToPage().then(
 				// add main-world script
-				() => injectScript('/main-world.js')
+				async () => {
+					try {
+						await injectScript('/main-world.js')
+					} catch (e) {
+						console.warn('[PageAgentExt]: injectScript failed.', e)
+					}
+				}
 			)
 		})
 	},

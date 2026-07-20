@@ -5,6 +5,8 @@
  * state, no ports, no event pushing. MV3 SW should be killed and restarted at
  * any time (idle timeout, extension update) without special handling.
  */
+import { browser } from '@wxt-dev/browser'
+
 import type { TabAction } from './TabsController'
 
 const PREFIX = '[TabsController.background]'
@@ -23,13 +25,13 @@ const debug = console.debug.bind(console, `\x1b[90m${PREFIX}\x1b[0m`)
  */
 async function resolveActiveTab(
 	payload: { windowId?: number } | undefined,
-	sender: chrome.runtime.MessageSender
-): Promise<chrome.tabs.Tab> {
+	sender: browser.runtime.MessageSender
+): Promise<browser.tabs.Tab> {
 	const windowId = payload?.windowId
 
 	if (windowId != null) {
 		debug('get_active_tab: resolving via caller-reported windowId', windowId)
-		const [tab] = await chrome.tabs.query({ active: true, windowId })
+		const [tab] = await browser.tabs.query({ active: true, windowId })
 		if (!tab) throw new Error(`No active tab found in window ${windowId}.`)
 		return tab
 	}
@@ -46,7 +48,7 @@ async function resolveActiveTab(
 
 export function handleTabControlMessage(
 	message: { type: 'TAB_CONTROL'; action: TabAction; payload: any },
-	sender: chrome.runtime.MessageSender,
+	sender: browser.runtime.MessageSender,
 	sendResponse: (response: unknown) => void
 ): true | undefined {
 	const { action, payload } = message
@@ -67,7 +69,7 @@ export function handleTabControlMessage(
 
 		case 'get_tab_info': {
 			debug('get_tab_info', payload)
-			chrome.tabs
+			browser.tabs
 				.get(payload.tabId)
 				.then((tab) => {
 					debug('get_tab_info: success', tab)
@@ -81,7 +83,7 @@ export function handleTabControlMessage(
 
 		case 'open_new_tab': {
 			debug('open_new_tab', payload)
-			chrome.tabs
+			browser.tabs
 				.create({ url: payload.url, windowId: payload.windowId, active: false })
 				.then((newTab) => {
 					debug('open_new_tab: success', newTab)
@@ -93,9 +95,27 @@ export function handleTabControlMessage(
 			return true // async response
 		}
 
+		case 'activate_tab': {
+			debug('activate_tab', payload)
+			browser.tabs
+				.update(payload.tabId, { active: true })
+				.then(() => {
+					debug('activate_tab: success')
+					sendResponse({ success: true })
+				})
+				.catch((error) => {
+					sendResponse({ error: error instanceof Error ? error.message : String(error) })
+				})
+			return true
+		}
+
 		case 'create_tab_group': {
 			debug('create_tab_group', payload)
-			chrome.tabs
+			if (import.meta.env.BROWSER !== 'chrome') {
+				sendResponse({ error: 'Tab groups are not supported in Firefox.' })
+				return true
+			}
+			browser.tabs
 				.group({ tabIds: payload.tabIds, createProperties: { windowId: payload.windowId } })
 				.then((groupId) => {
 					debug('create_tab_group: success', groupId)
@@ -110,7 +130,11 @@ export function handleTabControlMessage(
 
 		case 'update_tab_group': {
 			debug('update_tab_group', payload)
-			chrome.tabGroups
+			if (import.meta.env.BROWSER !== 'chrome') {
+				sendResponse({ error: 'Tab groups are not supported in Firefox.' })
+				return true
+			}
+			browser.tabGroups
 				.update(payload.groupId, payload.properties)
 				.then(() => {
 					sendResponse({ success: true })
@@ -123,7 +147,11 @@ export function handleTabControlMessage(
 
 		case 'add_tab_to_group': {
 			debug('add_tab_to_group', payload)
-			chrome.tabs
+			if (import.meta.env.BROWSER !== 'chrome') {
+				sendResponse({ error: 'Tab groups are not supported in Firefox.' })
+				return true
+			}
+			browser.tabs
 				.group({ tabIds: payload.tabId, groupId: payload.groupId })
 				.then(() => {
 					sendResponse({ success: true })
@@ -136,7 +164,7 @@ export function handleTabControlMessage(
 
 		case 'close_tab': {
 			debug('close_tab', payload)
-			chrome.tabs
+			browser.tabs
 				.remove(payload.tabId)
 				.then(() => {
 					sendResponse({ success: true })
@@ -148,7 +176,7 @@ export function handleTabControlMessage(
 		}
 
 		case 'get_window_tabs': {
-			chrome.tabs
+			browser.tabs
 				.query({ windowId: payload.windowId })
 				.then((tabs) => {
 					sendResponse({ success: true, tabs })

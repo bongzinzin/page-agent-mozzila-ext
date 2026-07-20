@@ -1,3 +1,4 @@
+import { browser } from '@wxt-dev/browser'
 import {
 	Copy,
 	CornerUpLeft,
@@ -37,7 +38,7 @@ export function ConfigPanel({ config, onSave, onClose }: ConfigPanelProps) {
 		config?.experimentalLlmsTxt ?? false
 	)
 	const [experimentalIncludeAllTabs, setExperimentalIncludeAllTabs] = useState(
-		config?.experimentalIncludeAllTabs ?? false
+		config?.experimentalIncludeAllTabs ?? true
 	)
 	const [disableNamedToolChoice, setDisableNamedToolChoice] = useState(
 		config?.disableNamedToolChoice ?? false
@@ -59,7 +60,7 @@ export function ConfigPanel({ config, onSave, onClose }: ConfigPanelProps) {
 		setMaxSteps(config?.maxSteps)
 		setSystemInstruction(config?.systemInstruction ?? '')
 		setExperimentalLlmsTxt(config?.experimentalLlmsTxt ?? false)
-		setExperimentalIncludeAllTabs(config?.experimentalIncludeAllTabs ?? false)
+		setExperimentalIncludeAllTabs(config?.experimentalIncludeAllTabs ?? true)
 		setDisableNamedToolChoice(config?.disableNamedToolChoice ?? false)
 	}
 
@@ -68,7 +69,7 @@ export function ConfigPanel({ config, onSave, onClose }: ConfigPanelProps) {
 		let interval: NodeJS.Timeout | null = null
 
 		const fetchToken = async () => {
-			const result = await chrome.storage.local.get('PageAgentExtUserAuthToken')
+			const result = await browser.storage.local.get('PageAgentExtUserAuthToken')
 			const token = result.PageAgentExtUserAuthToken
 			if (typeof token === 'string' && token) {
 				setUserAuthToken(token)

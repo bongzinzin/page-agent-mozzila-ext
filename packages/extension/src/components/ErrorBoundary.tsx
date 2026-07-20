@@ -1,3 +1,4 @@
+import { browser } from '@wxt-dev/browser'
 import { AlertTriangle, Eraser, RotateCcw } from 'lucide-react'
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 
@@ -28,7 +29,7 @@ export class ErrorBoundary extends Component<Props, State> {
 	}
 
 	handleResetConfig = async () => {
-		await chrome.storage.local.remove(['llmConfig', 'language', 'advancedConfig'])
+		await browser.storage.local.remove(['llmConfig', 'language', 'advancedConfig'])
 		window.location.reload()
 	}
 

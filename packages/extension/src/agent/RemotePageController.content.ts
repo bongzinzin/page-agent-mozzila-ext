@@ -2,12 +2,14 @@
  * content script for RemotePageController
  */
 import { PageController } from '@page-agent/page-controller'
+import { browser } from '@wxt-dev/browser'
 
 export function initPageController() {
 	let pageController: PageController | null = null
 	let intervalID: number | null = null
+	let monitoring = false
 
-	const myTabIdPromise = chrome.runtime
+	const myTabIdPromise = browser.runtime
 		.sendMessage({ type: 'PAGE_CONTROL', action: 'get_my_tab_id' })
 		.then((response) => {
 			return (response as { tabId: number | null }).tabId
@@ -27,48 +29,93 @@ export function initPageController() {
 		return pageController
 	}
 
-	intervalID = window.setInterval(async () => {
-		const agentHeartbeat = (await chrome.storage.local.get('agentHeartbeat')).agentHeartbeat
-		const now = Date.now()
-		const agentInTouch = typeof agentHeartbeat === 'number' && now - agentHeartbeat < 2_000
+	function startMonitoring() {
+		if (monitoring) return
+		monitoring = true
 
-		const isAgentRunning = (await chrome.storage.local.get('isAgentRunning')).isAgentRunning
-		const currentTabId = (await chrome.storage.local.get('currentTabId')).currentTabId
+		intervalID = window.setInterval(async () => {
+			const data = await browser.storage.local.get([
+				'agentHeartbeat',
+				'isAgentRunning',
+				'currentTabId',
+			])
+			const agentHeartbeat = data.agentHeartbeat
+			const now = Date.now()
+			const agentInTouch = typeof agentHeartbeat === 'number' && now - agentHeartbeat < 2_000
 
-		const shouldShowMask = isAgentRunning && agentInTouch && currentTabId === (await myTabIdPromise)
+			const isAgentRunning = data.isAgentRunning
+			const currentTabId = data.currentTabId
 
-		if (shouldShowMask) {
-			const pc = getPC()
-			pc.initMask()
-			await pc.showMask()
-		} else {
-			// await getPC().hideMask()
-			if (pageController) {
-				pageController.hideMask()
-				pageController.cleanUpHighlights()
+			const shouldShowMask =
+				isAgentRunning && agentInTouch && currentTabId === (await myTabIdPromise)
+
+			if (shouldShowMask) {
+				const pc = getPC()
+				pc.initMask()
+				await pc.showMask()
+			} else {
+				// await getPC().hideMask()
+				if (pageController) {
+					await pageController.hideMask()
+					await pageController.cleanUpHighlights()
+				}
 			}
-		}
 
-		if (!isAgentRunning && agentInTouch) {
-			if (pageController) {
-				pageController.dispose()
-				pageController = null
+			if (!isAgentRunning && agentInTouch) {
+				if (pageController) {
+					pageController.dispose()
+					pageController = null
+				}
 			}
-		}
-	}, 500)
+		}, 500)
+	}
 
-	chrome.runtime.onMessage.addListener((message, sender, sendResponse): true | undefined => {
+	async function stopMonitoring() {
+		monitoring = false
+		if (intervalID != null) {
+			clearInterval(intervalID)
+			intervalID = null
+		}
+		if (pageController) {
+			await pageController.hideMask()
+			await pageController.cleanUpHighlights()
+		}
+	}
+
+	browser.runtime.onMessage.addListener((message, sender, sendResponse): true | undefined => {
 		if (message.type !== 'PAGE_CONTROL') {
-			// sendResponse({
-			// 	success: false,
-			// 	error: `[RemotePageController.ContentScript]: Invalid message type: ${message.type}`,
-			// })
 			return
 		}
 
 		const { action, payload } = message
-		const methodName = getMethodName(action)
 
+		// Monitoring control messages
+		if (action === 'start_monitoring') {
+			startMonitoring()
+			sendResponse({ success: true })
+			return true
+		}
+		if (action === 'stop_monitoring') {
+			stopMonitoring()
+			sendResponse({ success: true })
+			return true
+		}
+
+		// DOM interaction actions — activate monitoring lazily
+		const domActions = [
+			'get_browser_state',
+			'update_tree',
+			'click_element',
+			'input_text',
+			'select_option',
+			'scroll',
+			'scroll_horizontally',
+		]
+		if (domActions.includes(action)) {
+			startMonitoring()
+		}
+
+		const methodName = getMethodName(action)
 		const pc = getPC() as any
 
 		switch (action) {
@@ -81,7 +128,6 @@ export function initPageController() {
 			case 'select_option':
 			case 'scroll':
 			case 'scroll_horizontally':
-			case 'execute_javascript':
 				pc[methodName](...(payload || []))
 					.then((result: any) => sendResponse(result))
 					.catch((error: any) =>
@@ -90,6 +136,14 @@ export function initPageController() {
 							error: error instanceof Error ? error.message : String(error),
 						})
 					)
+				break
+
+			case 'execute_javascript':
+				sendResponse({
+					success: false,
+					error:
+						'execute_javascript is not supported in extension content scripts (CSP restriction).',
+				})
 				break
 
 			default:

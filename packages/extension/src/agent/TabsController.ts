@@ -1,3 +1,5 @@
+import { browser } from '@wxt-dev/browser'
+
 import { isContentScriptAllowed } from './RemotePageController'
 
 const PREFIX = '[TabsController]'
@@ -9,7 +11,7 @@ function sendMessage(message: {
 	action: TabAction
 	payload?: any
 }): Promise<any> {
-	return chrome.runtime.sendMessage(message).catch((error) => {
+	return browser.runtime.sendMessage(message).catch((error) => {
 		console.error(PREFIX, message.action, error)
 		return null
 	})
@@ -18,14 +20,14 @@ function sendMessage(message: {
 /**
  * Resolve the window hosting this script's own context, when knowable.
  *
- * Extension pages (side panel, hub tab) have `chrome.windows` access and can
+ * Extension pages (side panel, hub tab) have `browser.windows` access and can
  * identify their own window directly via `getCurrent()`.
- * Content scripts have no `chrome.windows` access; they resolve `undefined`
+ * Content scripts have no `browser.windows` access; they resolve `undefined`
  * here and the background script falls back to `sender.tab` instead.
  */
 async function getOwnWindowId(): Promise<number | undefined> {
-	if (typeof chrome.windows === 'undefined') return undefined
-	const win = await chrome.windows.getCurrent()
+	if (typeof browser.windows === 'undefined') return undefined
+	const win = await browser.windows.getCurrent()
 	return win.id
 }
 
@@ -46,11 +48,11 @@ export class TabsController {
 	private tabs: TabMeta[] = []
 	private initialTabId: number | null = null
 	private tabGroupId: number | null = null
-	private experimentalIncludeAllTabs = false
+	private experimentalIncludeAllTabs = true
 	private task: string = ''
 
 	async init(task: string, options: TabsInitOptions = {}) {
-		const { includeInitialTab = true, experimentalIncludeAllTabs = false } = options
+		const { includeInitialTab = true, experimentalIncludeAllTabs = true } = options
 		debug('init', task, options)
 
 		if (this.disposed) {
@@ -89,7 +91,7 @@ export class TabsController {
 				action: 'get_window_tabs',
 				payload: { windowId: this.windowId },
 			})
-			for (const tab of allTabs.tabs as chrome.tabs.Tab[]) {
+			for (const tab of allTabs.tabs as browser.tabs.Tab[]) {
 				if (tab.id && !tab.pinned && isContentScriptAllowed(tab.url)) {
 					this.addTab({
 						id: tab.id,
@@ -123,6 +125,29 @@ export class TabsController {
 				})
 
 				await this.createTabGroup([this.initialTabId])
+			}
+		}
+
+		// ponytail: if active tab was extension page (hub), find last active web tab
+		if (!this.currentTabId && this.windowId) {
+			const allTabs = await sendMessage({
+				type: 'TAB_CONTROL',
+				action: 'get_window_tabs',
+				payload: { windowId: this.windowId },
+			})
+			const webTabs = (allTabs.tabs as browser.tabs.Tab[]).filter(
+				(tab) => tab.id && !tab.pinned && isContentScriptAllowed(tab.url)
+			)
+			if (webTabs.length > 0) {
+				const fallback = webTabs[webTabs.length - 1]
+				this.currentTabId = fallback.id!
+				this.addTab({
+					id: fallback.id!,
+					isInitial: true,
+					url: fallback.url,
+					title: fallback.title,
+					status: fallback.status,
+				})
 			}
 		}
 
@@ -175,6 +200,14 @@ export class TabsController {
 		}
 
 		await this.updateCurrentTabId(tabId)
+		const result = await sendMessage({
+			type: 'TAB_CONTROL',
+			action: 'activate_tab',
+			payload: { tabId },
+		})
+		if (result?.error) {
+			throw new Error(`Failed to activate tab: ${result.error}`)
+		}
 
 		return `✅ Switched to tab ID ${tabId}.`
 	}
@@ -214,6 +247,7 @@ export class TabsController {
 	}
 
 	private async createTabGroup(tabIds: number[]) {
+		if (import.meta.env.BROWSER !== 'chrome') return // ponytail: no tab groups on Firefox
 		const result = await sendMessage({
 			type: 'TAB_CONTROL',
 			action: 'create_tab_group',
@@ -248,8 +282,19 @@ export class TabsController {
 	async updateCurrentTabId(tabId: number | null) {
 		debug('updateCurrentTabId', tabId)
 
+		// stop monitoring on the old tab before switching
+		if (this.currentTabId != null && this.currentTabId !== tabId) {
+			browser.runtime
+				.sendMessage({
+					type: 'PAGE_CONTROL',
+					action: 'stop_monitoring',
+					targetTabId: this.currentTabId,
+				})
+				.catch(() => {})
+		}
+
 		this.currentTabId = tabId
-		await chrome.storage.local.set({ currentTabId: tabId })
+		await browser.storage.local.set({ currentTabId: tabId })
 	}
 
 	async getTabInfo(tabId: number): Promise<{ title: string; url: string }> {
@@ -333,7 +378,7 @@ export class TabsController {
 		// sendMessage already logged the failure; keep the stale mirror
 		if (!result?.success) return
 
-		const liveTabs = (result.tabs as chrome.tabs.Tab[]).filter((t) => t.id != null)
+		const liveTabs = (result.tabs as browser.tabs.Tab[]).filter((t) => t.id != null)
 		const liveIds = new Set(liveTabs.map((t) => t.id!))
 
 		const closedIds = this.tabs.filter((t) => !liveIds.has(t.id)).map((t) => t.id)
@@ -378,7 +423,7 @@ export class TabsController {
 		}
 	}
 
-	private shouldTrack(tab: chrome.tabs.Tab): boolean {
+	private shouldTrack(tab: browser.tabs.Tab): boolean {
 		if (this.tabGroupId != null && tab.groupId === this.tabGroupId) return true
 		return (
 			this.experimentalIncludeAllTabs &&
@@ -403,6 +448,7 @@ export type TabAction =
 	| 'get_active_tab'
 	| 'get_tab_info'
 	| 'open_new_tab'
+	| 'activate_tab'
 	| 'create_tab_group'
 	| 'update_tab_group'
 	| 'add_tab_to_group'

@@ -101,6 +101,7 @@ export function parseLLMConfig(config: LLMConfig): ResolvedLLMConfig {
 		model: config.model,
 		apiKey: config.apiKey || '',
 		temperature: config.temperature,
+		contextWindow: config.contextWindow ?? 128000,
 		maxRetries: config.maxRetries ?? 2,
 		transformRequestBody: config.transformRequestBody ?? ((requestBody) => requestBody),
 		disableNamedToolChoice: config.disableNamedToolChoice ?? false,

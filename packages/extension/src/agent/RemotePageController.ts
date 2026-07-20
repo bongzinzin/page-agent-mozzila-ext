@@ -1,4 +1,5 @@
 import type { BrowserState } from '@page-agent/page-controller'
+import { browser } from '@wxt-dev/browser'
 
 import type { TabsController } from './TabsController'
 
@@ -12,7 +13,7 @@ function sendMessage(message: {
 	targetTabId: number
 	payload?: any
 }): Promise<any> {
-	return chrome.runtime.sendMessage(message).catch((error) => {
+	return browser.runtime.sendMessage(message).catch((error) => {
 		console.error(PREFIX, message.action, error)
 		return null
 	})
@@ -178,6 +179,7 @@ export function isContentScriptAllowed(url: string | undefined): boolean {
 	const restrictedPatterns = [
 		/^chrome:\/\//,
 		/^chrome-extension:\/\//,
+		/^moz-extension:\/\//,
 		/^about:/,
 		/^edge:\/\//,
 		/^brave:\/\//,

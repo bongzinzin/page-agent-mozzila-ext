@@ -1,4 +1,5 @@
 import { type AgentConfig, PageAgentCore } from '@page-agent/core'
+import { browser } from '@wxt-dev/browser'
 
 import { RemotePageController } from './RemotePageController'
 import { TabsController } from './TabsController'
@@ -37,10 +38,10 @@ export class MultiPageAgent extends PageAgentCore {
 		)
 
 		const includeInitialTab = config.includeInitialTab ?? true
-		const experimentalIncludeAllTabs = config.experimentalIncludeAllTabs ?? false
+		const experimentalIncludeAllTabs = config.experimentalIncludeAllTabs ?? true
 
 		/**
-		 * Project agent status into chrome.storage. The content script polls
+		 * Project agent status into browser.storage. The content script polls
 		 * `isAgentRunning` + `agentHeartbeat` (eventually consistent by design).
 		 *
 		 * When the agent is in side-panel and user closed the side-panel.
@@ -76,7 +77,7 @@ export class MultiPageAgent extends PageAgentCore {
 					clearInterval(heartBeatInterval)
 					heartBeatInterval = null
 				}
-				chrome.storage.local.set({ isAgentRunning: false }).catch(console.error)
+				browser.storage.local.set({ isAgentRunning: false }).catch(console.error)
 
 				tabsController.dispose()
 			},
@@ -87,14 +88,14 @@ export class MultiPageAgent extends PageAgentCore {
 
 			if (running && !heartBeatInterval) {
 				heartBeatInterval = window.setInterval(() => {
-					void chrome.storage.local.set({ agentHeartbeat: Date.now() })
+					void browser.storage.local.set({ agentHeartbeat: Date.now() })
 				}, 1_000)
 			} else if (!running && heartBeatInterval) {
 				clearInterval(heartBeatInterval)
 				heartBeatInterval = null
 			}
 
-			chrome.storage.local.set({ isAgentRunning: running }).catch(console.error)
+			browser.storage.local.set({ isAgentRunning: running }).catch(console.error)
 		})
 	}
 }
